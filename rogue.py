@@ -28,8 +28,11 @@ def rng_options(pool,used=()):
     avail=[a for a in pool if a[0] not in used] or pool
     found=[]
     while avail and len(found)<3:
-        weighted=[RARITY.get(a[2],12) if len(a)>3 else 1 for a in avail]
-        a=random.choices(avail,weights=weighted,k=1)[0]
+        tiers=[t for t in RARITY if any(len(a)>3 and a[2]==t for a in avail)]
+        if tiers:
+            tier=random.choices(tiers,weights=[RARITY[t] for t in tiers],k=1)[0]
+            a=random.choice([x for x in avail if len(x)>3 and x[2]==tier])
+        else:a=random.choice(avail)
         found.append(a);avail.remove(a)
     return [a[0] for a in found]
 def player(name,ws=None,ai=False):
