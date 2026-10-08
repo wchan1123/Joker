@@ -19,3 +19,13 @@
 .selectedpair{transform:translateY(-26px)!important;outline:3px solid #ffc966;box-shadow:0 0 18px #faca68;z-index:20!important}
 #discard-stack{cursor:pointer;pointer-events:auto}.discard-zone{pointer-events:auto}.pilemodal{position:fixed;inset:0;background:#000c;z-index:300;display:grid;place-items:center}.pilepanel{background:#193a30;border:2px solid #d4ae71;border-radius:18px;padding:22px;max-width:min(90vw,700px);max-height:80vh;overflow:auto}.pilepanel #pilelist{display:flex;flex-wrap:wrap;gap:8px;max-height:55vh;overflow:auto}
 .spectools{background:#122e27;border:1px solid #b6955f;border-radius:16px;padding:14px;margin-top:14px;display:grid;gap:10px}.spectools label{display:flex;gap:10px;align-items:center}.spectools select{background:#f3ede0;color:#162c2b;padding:7px;border-radius:7px}.spectools #specthand{display:flex;gap:4px;overflow-x:auto;padding:8px}.spectools #spectchat{background:#0d231f;border-radius:8px;padding:10px}#chatlog{max-height:130px;overflow:auto;font-size:13px}#chatlog div{padding:4px 0}
+
+/* Larger cards: preserve pixel art and make the hand the visual focus */
+.felt{min-height:590px;height:min(76vw,720px);max-height:760px}
+.player{width:250px;max-width:42%}.player .fan{height:110px}.fan .card{width:76px;height:108px;margin-left:-40px}
+.hand{height:155px;bottom:5%;width:93%;overflow:visible}.hand .card{width:95px;height:138px;margin-left:clamp(-43px,-3vw,-19px);cursor:pointer;touch-action:none}
+.card{image-rendering:pixelated}.selectedpair{transform:translateY(-26px) scale(1.06)!important}
+.pairtools{position:relative;margin-top:12px;z-index:15}.pairtools #draghelp{color:#ffdb98;font-size:12px}
+.pair-drag-ghost{position:fixed;z-index:600;width:80px;height:115px;image-rendering:pixelated;pointer-events:none;filter:drop-shadow(4px 10px 8px #000a);transform:rotate(-9deg)}
+#discard-stack.drop-ready{outline:3px dashed #ffe09b;outline-offset:14px;filter:drop-shadow(0 0 18px #ffd366)}
+@media(max-width:650px){.felt{min-height:600px;height:650px}.player{max-width:47%;width:165px}.player .fan{height:78px}.fan .card{width:51px;height:74px;margin-left:-32px}.hand{height:116px;bottom:8%;width:96%}.hand .card{width:69px;height:102px;margin-left:-33px}.pairtools{font-size:12px;margin:12px auto}.centerpiece{top:48%}}
