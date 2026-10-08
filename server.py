@@ -23,8 +23,10 @@ def next_live(room,seat):
 def status(room,seat):
     p=room['players'][seat]
     last=room['last'].copy()
-    if room['phase']=='playing' and last.get('action')=='draw' and last.get('drawer')!=seat:last.pop('card',None);last.pop('discard',None)
-    return dict(type='state',code=room['code'],seat=seat,phase=room['phase'],turn=room['turn'],target=room['target'],round=room['round'],last=last,finish=room['finish'],players=[dict(name=x['name'],ai=x['ai'],connected=bool(x['ai'] or (x['ws'] and not x['ws'].closed)),count=len(room['hands'][i]),stats=x['stats']) if x else None for i,x in enumerate(room['players'])],hand=room['hands'][seat] if room['phase']!='lobby' else [],host=seat==room['host'],results=room['results'],event=room['event'])
+    if room['phase']=='playing' and last.get('action')=='draw' and last.get('drawer')!=seat and room['hands'][seat]:last.pop('card',None);last.pop('discard',None)
+    spectating=room['phase']=='playing' and not room['hands'][seat]
+    visible={str(i):room['hands'][i][:] for i,x in enumerate(room['players']) if x and room['hands'][i]} if spectating else {}
+    return dict(spectating=spectating,visibleHands=visible,discardPile=room.get('discard_pile',[]),type='state',code=room['code'],seat=seat,phase=room['phase'],turn=room['turn'],target=room['target'],round=room['round'],last=last,finish=room['finish'],players=[dict(name=x['name'],ai=x['ai'],connected=bool(x['ai'] or (x['ws'] and not x['ws'].closed)),count=len(room['hands'][i]),stats=x['stats']) if x else None for i,x in enumerate(room['players'])],hand=room['hands'][seat] if room['phase']!='lobby' else [],host=seat==room['host'],results=room['results'],event=room['event'])
 async def send(ws,payload):
     if ws and not ws.closed:
         try:await ws.send_json(payload)
@@ -46,7 +48,9 @@ def prep(room):
     deck.append(random.choice([0,1]));random.shuffle(deck)
     room['hands']=[[] for _ in range(MAX)]
     for j,c in enumerate(deck):room['hands'][seats[j%len(seats)]].append(c)
-    removed=sum(len(pair_off(room['hands'][s])) for s in seats)
+    initial=[c for seat in seats for c in pair_off(room['hands'][seat])]
+    room['discard_pile']=initial[:]
+    removed=len(initial)
     for s in seats:random.shuffle(room['hands'][s])
     room['finish']=[s for s in seats if not room['hands'][s]]
     room['phase']='playing';room['round']+=1;room['results']=None;room['event']+=1
@@ -74,7 +78,7 @@ def draw(room,seat,index):
     if room['phase']!='playing' or seat!=room['turn']:return '차례가 아닙니다.'
     target=room['target'];hand=room['hands'][target]
     if not isinstance(index,int) or isinstance(index,bool) or not 0<=index<len(hand):return '카드를 다시 선택해 주세요.'
-    card=hand.pop(index);room['hands'][seat].append(card);discard=pair_off(room['hands'][seat]);random.shuffle(room['hands'][seat]);room['event']+=1
+    card=hand.pop(index);room['hands'][seat].append(card);discard=pair_off(room['hands'][seat]);room['discard_pile'].extend(discard);random.shuffle(room['hands'][seat]);room['event']+=1
     if not room['hands'][target] and target not in room['finish']:room['finish'].append(target)
     if not room['hands'][seat] and seat not in room['finish']:room['finish'].append(seat)
     room['last']={'text':f"{room['players'][seat]['name']} → {room['players'][target]['name']} 카드 뽑기"+(' · 짝 제거!' if discard else ''),'action':'draw','drawer':seat,'from':target,'card':card,'discard':discard,'id':room['event']}
@@ -170,5 +174,6 @@ async def websocket(req):
     return ws
 
 async def health(req):return web.json_response({'ok':True,'rooms':len(rooms)})
-app=web.Application();app.router.add_get('/health',health);app.router.add_get('/ws',websocket);app.router.add_static('/',os.path.join(ROOT,'public'),show_index=True)
+async def index(req):return web.FileResponse(os.path.join(ROOT,'public','index.html'))
+app=web.Application();app.router.add_get('/',index);app.router.add_get('/health',health);app.router.add_get('/ws',websocket);app.router.add_static('/',os.path.join(ROOT,'public'),show_index=False)
 if __name__=='__main__':web.run_app(app,host='0.0.0.0',port=int(os.environ.get('PORT','8080')))
