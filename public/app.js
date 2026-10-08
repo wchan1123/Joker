@@ -22,7 +22,7 @@ $('exitlobby').onclick=$('exitgame').onclick=$('exitend').onclick=leave;
 $('sound').onclick=()=>{muted=!muted;$('sound').textContent=muted?'🔇 소리 꺼짐':'🔊 소리 켜짐';if(!muted)audio(550)};
 function receive(s){const prev=state;state=s;activeCode=s.code;
 if(s.phase==='lobby'){show('lobby');lobby()}
-else if(s.phase==='playing'){show('game');renderGame();if(prev?.event!==s.event){if(s.last.action==='shuffle'){animateShuffle();shuffleSound()}else if(s.last.action==='draw'){animateDraw(prev,s)}}}
+else if(s.phase==='playing'){show('game');renderGame();if(prev?.event!==s.event){if(s.last.action==='shuffle'){animateShuffle();shuffleSound()}else if(s.last.action==='draw'){animateDraw(prev,s);if((s.discardPile?.length||0)>(prev?.discardPile?.length||0))animateDiscard(prev,s)}}}
 else if(s.phase==='finished'){if(prev?.event!==s.event&&s.last.action==='finish'){show('game');renderGame();revealFinal(s);setTimeout(()=>renderEnd(s),2800)}else renderEnd(s)}
 }
 function lobby(){ $('roomcode').textContent=state.code;const occupied=state.players.filter(Boolean).length;
@@ -36,11 +36,11 @@ const coords={1:[],2:[[50,16]],3:[[22,27],[78,27]],4:[[19,37],[50,13],[81,37]],5
 function opponents(){let seats=[];for(let j=1;j<=5;j++){let i=(state.seat+j)%6;if(state.players[i])seats.push(i)}return seats}
 function renderGame(){let s=state;const ps=s.players;const mine=ps[s.seat];$('round').textContent=s.round;$('gameroom').textContent=`ROOM ${s.code}`;
 $('score').textContent=`승 ${mine.stats.wins} · 패 ${mine.stats.losses} · 연승 ${mine.stats.streak} · 최고 ${mine.stats.best}`;
-$('info').textContent=s.turn===s.seat?'✨ 내 차례':s.turn===null?'게임 종료':`${ps[s.turn]?.name||'플레이어'} 차례`;
+$('info').textContent=s.spectating?'👁 관전 중 · 손패 공개':s.turn===s.seat?'✨ 내 차례':s.turn===null?'게임 종료':`${ps[s.turn]?.name||'플레이어'} 차례`;
 $('message').textContent=s.turn===s.seat?`${ps[s.target]?.name}의 카드를 선택하세요`:s.last.text;
 $('event').textContent=s.last.action==='draw'?'카드를 뽑았습니다':'';
-const other=opponents();$('players').innerHTML=other.map((seat,order)=>{let p=ps[seat],pos=place(order,other.length+1),clickable=s.turn===s.seat&&s.target===seat&&!animating;
-return `<div class="player ${clickable?'pickable':''}" style="left:${pos[0]}%;top:${pos[1]}%"><div class="label ${s.turn===seat?'active':''} ${p.count===0?'out':''}">${p.ai?'🤖':'👤'} ${esc(p.name)} · ${p.count}장 ${p.count===0?'✓':''}</div><div class="fan">${Array.from({length:p.count},(_,ix)=>`<img class="card" data-seat="${seat}" data-index="${ix}" src="${card(41)}" alt="상대 카드">`).join('')}</div></div>`}).join('');
+renderDiscard(s);const other=opponents();$('players').innerHTML=other.map((seat,order)=>{let p=ps[seat],pos=place(order,other.length+1),clickable=s.turn===s.seat&&s.target===seat&&!animating;
+return `<div class="player ${clickable?'pickable':''}" style="left:${pos[0]}%;top:${pos[1]}%"><div class="label ${s.turn===seat?'active':''} ${p.count===0?'out':''}">${p.ai?'🤖':'👤'} ${esc(p.name)} · ${p.count}장 ${p.count===0?'✓':''}</div><div class="fan">${Array.from({length:p.count},(_,ix)=>`<img class="card" data-seat="${seat}" data-index="${ix}" src="${card(s.spectating&&s.visibleHands?.[seat]?s.visibleHands[seat][ix]:41)}" alt="상대 카드">`).join('')}</div></div>`}).join('');
 $('players').querySelectorAll('.pickable img').forEach(el=>el.onclick=()=>{if(animating)return;animating=true;send({type:'draw',index:Number(el.dataset.index)});setTimeout(()=>animating=false,820)});
 $('mycards').innerHTML=s.hand.map((c,i)=>`<img class="card" src="${card(c)}" alt="내 카드" style="--rot:${((i-(s.hand.length-1)/2)*Math.min(5,50/Math.max(s.hand.length,1))).toFixed(2)}deg;--y:${Math.abs(i-(s.hand.length-1)/2)*1.0}px">`).join('');
 }
@@ -97,3 +97,16 @@ function renderEnd(s){show('end');const loser=s.results?.loser,mine=s.players[s.
 $('ranking').innerHTML=(s.results?.order||[]).map((id,i)=>`<div>${id===loser?'🃏 패배':`🏅 ${i+1}위`} · ${esc(s.players[id]?.name||'플레이어')} ${id===s.seat?'(나)':''}</div>`).join('');$('myrecord').textContent=`내 기록: ${mine.stats.wins}승 ${mine.stats.losses}패 · 현재 ${mine.stats.streak}연승 · 최고 ${mine.stats.best}연승`;$('rematch').classList.toggle('hidden',!s.host)}
 const urlRoom=new URLSearchParams(location.search).get('room');if(urlRoom){$('code').value=urlRoom.toUpperCase();$('join').textContent='초대받은 방 입장'}
 try{const saved=JSON.parse(sessionStorage.getItem('jokerSession'));if(saved){session=saved;reconnect()}}catch{}
+
+function renderDiscard(s){
+ const zone=$('discard-stack'),count=$('discard-count');if(!zone)return;
+ let pile=s.discardPile||[];count.textContent='버린 카드 '+pile.length+'장';
+ zone.innerHTML=pile.map((x,i)=>'<img src="'+card(41)+'" class="pile-card" style="--n:'+i+';--angle:'+((i*7)%13-6)+'deg">').join('');
+}
+function animateDiscard(prev,s){
+ const cards=(s.discardPile||[]).slice((prev?.discardPile||[]).length);
+ const zone=$('discard-stack'),felt=document.querySelector('.felt');if(!zone||!felt||!cards.length)return;
+ let a=(s.last.drawer===s.seat?$('mycards'):document.querySelector('.player .fan'))?.getBoundingClientRect()||felt.getBoundingClientRect(),b=zone.getBoundingClientRect();
+ cards.forEach((id,i)=>{let el=document.createElement('img');el.src=card(id);el.className='discard-flight';el.style.left=(a.left+a.width/2-27)+'px';el.style.top=(a.top+a.height/2-38)+'px';document.body.append(el);let dx=b.left+b.width/2-(a.left+a.width/2),dy=b.top+b.height/2-(a.top+a.height/2);
+ el.animate([{transform:'translate(0,0) rotate(-14deg)'},{transform:'translate('+dx*.5+'px,'+(dy*.5-80)+'px) rotate(18deg)',offset:.55},{transform:'translate('+dx+'px,'+dy+'px) rotate(0deg) scale(.83)'}],{duration:850,delay:i*170,fill:'forwards',easing:'ease-in-out'});setTimeout(()=>el.remove(),1000+i*170)});
+}
