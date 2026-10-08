@@ -20,7 +20,7 @@ $('start').onclick=$('rematch').onclick=()=>send({type:'start'});
 function leave(){send({type:'leave'});session=null;state=null;sessionStorage.removeItem('jokerSession');history.replaceState({},'',location.pathname);show('home')}
 $('exitlobby').onclick=$('exitgame').onclick=$('exitend').onclick=leave;
 $('sound').onclick=()=>{muted=!muted;$('sound').textContent=muted?'🔇 소리 꺼짐':'🔊 소리 켜짐';if(!muted)audio(550)};
-function receive(s){const prev=state;if(prev?.event!==s.event&&s.last.action==='pair')selectedPair=[];state=s;activeCode=s.code;
+function receive(s){const prev=state;if(prev?.event!==s.event&&s.last.action==='pair'){selectedPair=[];clearDrag()}state=s;activeCode=s.code;
 if(s.phase==='lobby'){show('lobby');lobby()}
 else if(s.phase==='playing'||s.phase==='pairing'){show('game');renderGame();if(prev?.event!==s.event){if(s.last.action==='shuffle'){animateShuffle();shuffleSound()}else if(s.last.action==='pair'){animateDiscard(prev,s)}else if(s.last.action==='draw'){animateDraw(prev,s);if((s.discardPile?.length||0)>(prev?.discardPile?.length||0))animateDiscard(prev,s)}}}
 else if(s.phase==='finished'){if(prev?.event!==s.event&&s.last.action==='finish'){show('game');renderGame();revealFinal(s);setTimeout(()=>renderEnd(s),2800)}else renderEnd(s)}
@@ -112,17 +112,58 @@ function animateDiscard(prev,s){
  el.animate([{transform:'translate(0,0) rotate(-14deg)'},{transform:'translate('+dx*.5+'px,'+(dy*.5-80)+'px) rotate(18deg) rotateY(90deg)',offset:.55},{transform:'translate('+dx+'px,'+dy+'px) rotate(0deg) rotateY(180deg) scale(.83)'}],{duration:850,delay:i*170,fill:'forwards',easing:'ease-in-out'});setTimeout(()=>{el.src=card(41)},430+i*170);setTimeout(()=>el.remove(),1000+i*170)});
 }
 
+let dragGesture=null,dragGhosts=[];
+function clearDrag(){dragGhosts.forEach(x=>x.remove());dragGhosts=[];dragGesture=null;$('discard-stack')?.classList.remove('drop-ready')}
+function beginPairDrag(e){
+ if(state?.phase!=='pairing'||state.ready?.[state.seat]||selectedPair.length!==2||e.button!==0)return;
+ const picked=e.target.closest('[data-handindex]');
+ if(!picked||!selectedPair.includes(Number(picked.dataset.handindex)))return;
+ dragGesture={pointer:e.pointerId,x:e.clientX,y:e.clientY,started:false};
+}
+document.addEventListener('pointermove',e=>{
+ if(!dragGesture||dragGesture.pointer!==e.pointerId)return;
+ const d=dragGesture,dx=e.clientX-d.x,dy=e.clientY-d.y;
+ if(!d.started&&Math.hypot(dx,dy)>12){
+  d.started=true;
+  dragGhosts=selectedPair.map((i,n)=>{
+   const img=document.createElement('img');img.src=card(state.hand[i]);img.className='pair-drag-ghost';
+   document.body.append(img);return img
+  });
+ }
+ if(d.started){e.preventDefault();dragGhosts.forEach((img,n)=>{img.style.left=(e.clientX+(n?21:-21)-40)+'px';img.style.top=(e.clientY-56)+'px';});
+ const rect=$('discard-stack').getBoundingClientRect();
+ const valid=e.clientX>=rect.left-75&&e.clientX<=rect.right+75&&e.clientY>=rect.top-95&&e.clientY<=rect.bottom+95;
+ $('discard-stack').classList.toggle('drop-ready',valid);
+ }
+},{passive:false});
+document.addEventListener('pointerup',e=>{
+ if(!dragGesture||dragGesture.pointer!==e.pointerId)return;
+ const d=dragGesture,rect=$('discard-stack').getBoundingClientRect();
+ const inPile=e.clientX>=rect.left-75&&e.clientX<=rect.right+75&&e.clientY>=rect.top-95&&e.clientY<=rect.bottom+95;
+ const indices=[...selectedPair];
+ if(d.started&&inPile&&state?.phase==='pairing'&&indices.length===2){
+   const cards=indices.map(i=>state.hand[i]);
+   if(cards.every(id=>id>=2)&&(cards[0]-2)%13===(cards[1]-2)%13){
+     send({type:'discard_pair',indices});selectedPair=[];toast('짝을 카드 더미로 버렸어요!');
+   }else toast('같은 숫자의 카드 두 장만 버릴 수 있어요.');
+ }else if(d.started)toast('카드 두 장을 중앙 더미 위로 옮겨주세요.');
+ clearDrag();
+});
+document.addEventListener('pointercancel',clearDrag);
 function renderPairUI(s){
  const active=s.phase==='pairing'&&!s.ready?.[s.seat];$('pairtools').classList.toggle('hidden',s.phase!=='pairing');
- $('pairdiscard').disabled=!active||selectedPair.length!==2;
  $('pairready').disabled=!active;
  $('pairhint').textContent=s.ready?.[s.seat]?'준비 완료 · 다른 플레이어를 기다리는 중':selectedPair.length+' / 2장 선택';
- $('mycards').querySelectorAll('[data-handindex]').forEach(el=>el.onclick=()=>{
-  if(!active)return;const i=Number(el.dataset.handindex);selectedPair=selectedPair.includes(i)?selectedPair.filter(x=>x!==i):selectedPair.length<2?[...selectedPair,i]:[i];
-  renderGame();
+ $('mycards').querySelectorAll('[data-handindex]').forEach(el=>{
+  el.onpointerdown=beginPairDrag;
+  el.onclick=()=>{
+   if(!active||dragGesture?.started)return;
+   const i=Number(el.dataset.handindex);
+   selectedPair=selectedPair.includes(i)?selectedPair.filter(x=>x!==i):selectedPair.length<2?[...selectedPair,i]:[i];
+   renderGame();
+  };
  });
 }
-$('pairdiscard').onclick=()=>{if(selectedPair.length!==2)return;send({type:'discard_pair',indices:selectedPair});selectedPair=[]};
 $('pairready').onclick=()=>{selectedPair=[];send({type:'pair_ready'})};
 function renderSpectatorUI(s){
  const active=s.phase==='playing'&&s.spectating;const panel=$('spectools');panel.classList.toggle('hidden',!active);if(!active)return;
