@@ -14,3 +14,8 @@
 #discard-count{font-size:11px;color:#f6d6a0}
 .discard-flight{position:fixed;z-index:200;width:54px;height:76px;image-rendering:pixelated;pointer-events:none;filter:drop-shadow(3px 8px 6px #000a)}
 .centerpiece{top:47%}.centerpiece .ornament{font-size:15px}.centerpiece #message{font-size:clamp(11px,1.4vw,17px);margin:6px 0}
+
+.pairtools{position:relative;z-index:9;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;padding:14px;background:#10291fdc;border:1px solid #caab6b;border-radius:14px;margin:10px auto;max-width:750px}.pairtools button{padding:8px 12px}.pairtools span{font-size:13px}
+.selectedpair{transform:translateY(-26px)!important;outline:3px solid #ffc966;box-shadow:0 0 18px #faca68;z-index:20!important}
+#discard-stack{cursor:pointer;pointer-events:auto}.discard-zone{pointer-events:auto}.pilemodal{position:fixed;inset:0;background:#000c;z-index:300;display:grid;place-items:center}.pilepanel{background:#193a30;border:2px solid #d4ae71;border-radius:18px;padding:22px;max-width:min(90vw,700px);max-height:80vh;overflow:auto}.pilepanel #pilelist{display:flex;flex-wrap:wrap;gap:8px;max-height:55vh;overflow:auto}
+.spectools{background:#122e27;border:1px solid #b6955f;border-radius:16px;padding:14px;margin-top:14px;display:grid;gap:10px}.spectools label{display:flex;gap:10px;align-items:center}.spectools select{background:#f3ede0;color:#162c2b;padding:7px;border-radius:7px}.spectools #specthand{display:flex;gap:4px;overflow-x:auto;padding:8px}.spectools #spectchat{background:#0d231f;border-radius:8px;padding:10px}#chatlog{max-height:130px;overflow:auto;font-size:13px}#chatlog div{padding:4px 0}
