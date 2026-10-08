@@ -43,6 +43,7 @@ renderDiscard(s);const other=opponents();$('players').innerHTML=other.map((seat,
 return `<div class="player ${clickable?'pickable':''}" style="left:${pos[0]}%;top:${pos[1]}%"><div class="label ${s.turn===seat?'active':''} ${p.count===0?'out':''}">${p.ai?'🤖':'👤'} ${esc(p.name)} · ${p.count}장 ${p.count===0?'✓':''}</div><div class="fan">${Array.from({length:p.count},(_,ix)=>`<img class="card" data-seat="${seat}" data-index="${ix}" src="${card(s.spectating&&s.visibleHands?.[seat]?s.visibleHands[seat][ix]:41)}" alt="상대 카드">`).join('')}</div></div>`}).join('');
 $('players').querySelectorAll('.pickable img').forEach(el=>el.onclick=()=>{if(animating)return;animating=true;send({type:'draw',index:Number(el.dataset.index)});setTimeout(()=>animating=false,820)});
 $('mycards').innerHTML=s.hand.map((c,i)=>`<img data-handindex="${i}" class="card ${selectedPair.includes(i)?'selectedpair':''}" src="${card(c)}" alt="내 카드" style="--rot:${((i-(s.hand.length-1)/2)*Math.min(5,50/Math.max(s.hand.length,1))).toFixed(2)}deg;--y:${Math.abs(i-(s.hand.length-1)/2)*1.0}px">`).join('');
+ renderPairUI(s);renderSpectatorUI(s);
 }
 function animateShuffle(){
  const felt=document.querySelector('.felt');if(!felt)return;
