@@ -24,9 +24,9 @@ def status(room,seat):
     p=room['players'][seat]
     last=room['last'].copy()
     if room['phase']=='playing' and last.get('action')=='draw' and last.get('drawer')!=seat and room['hands'][seat]:last.pop('card',None);last.pop('discard',None)
-    spectating=room['phase']=='playing' and not room['hands'][seat]
+    spectating=room['phase']=='playing' and seat in room['finish']
     visible={str(i):room['hands'][i][:] for i,x in enumerate(room['players']) if x and room['hands'][i]} if spectating else {}
-    return dict(spectating=spectating,visibleHands=visible,discardPile=room.get('discard_pile',[]),type='state',code=room['code'],seat=seat,phase=room['phase'],turn=room['turn'],target=room['target'],round=room['round'],last=last,finish=room['finish'],players=[dict(name=x['name'],ai=x['ai'],connected=bool(x['ai'] or (x['ws'] and not x['ws'].closed)),count=len(room['hands'][i]),stats=x['stats']) if x else None for i,x in enumerate(room['players'])],hand=room['hands'][seat] if room['phase']!='lobby' else [],host=seat==room['host'],results=room['results'],event=room['event'])
+    return dict(chat=room.get('chat',[]) if spectating else [],manual=room.get('manual',False),ready=room.get('ready',[]),spectating=spectating,visibleHands=visible,discardPile=room.get('discard_pile',[]),type='state',code=room['code'],seat=seat,phase=room['phase'],turn=room['turn'],target=room['target'],round=room['round'],last=last,finish=room['finish'],players=[dict(name=x['name'],ai=x['ai'],connected=bool(x['ai'] or (x['ws'] and not x['ws'].closed)),count=len(room['hands'][i]),stats=x['stats']) if x else None for i,x in enumerate(room['players'])],hand=room['hands'][seat] if room['phase']!='lobby' else [],host=seat==room['host'],results=room['results'],event=room['event'])
 async def send(ws,payload):
     if ws and not ws.closed:
         try:await ws.send_json(payload)
@@ -48,17 +48,23 @@ def prep(room):
     deck.append(random.choice([0,1]));random.shuffle(deck)
     room['hands']=[[] for _ in range(MAX)]
     for j,c in enumerate(deck):room['hands'][seats[j%len(seats)]].append(c)
-    initial=[c for seat in seats for c in pair_off(room['hands'][seat])]
+    room['manual']=sum(not room['players'][i]['ai'] for i in seats)>1
+    room['ready']=[False]*MAX
+    initial=[]
+    for i in seats:
+        if not room['manual'] or room['players'][i]['ai']:
+            initial.extend(pair_off(room['hands'][i]))
+            room['ready'][i]=True
     room['discard_pile']=initial[:]
     removed=len(initial)
     for s in seats:random.shuffle(room['hands'][s])
     room['finish']=[s for s in seats if not room['hands'][s]]
-    room['phase']='playing';room['round']+=1;room['results']=None;room['event']+=1
+    room['phase']='pairing' if room['manual'] else 'playing';room['chat']=[];room['round']+=1;room['results']=None;room['event']+=1
     remaining=live(room)
     room['turn']=random.choice(remaining) if len(remaining)>1 else None
     room['target']=next_live(room,room['turn']) if room['turn'] is not None else None
-    room['last']={'text':f'카드를 섞어 나눴어요! 짝 {removed//2}쌍 자동 제거.','action':'shuffle','id':room['event']}
-    if len(remaining)<=1:finalize(room)
+    room['last']={'text':'같은 숫자 카드 두 장을 선택해서 버려 주세요.' if room['manual'] else f'카드를 섞어 나눴어요! 짝 {removed//2}쌍 자동 제거.','action':'shuffle','id':room['event']}
+    if room['phase']=='playing' and len(remaining)<=1:finalize(room)
     return True
 
 def finalize(room):
@@ -153,6 +159,35 @@ async def websocket(req):
                 if any(p and not p['ai'] and (not p['ws'] or p['ws'].closed) for p in room['players']):await send(ws,dict(type='error',message='오프라인 플레이어가 있습니다.'));continue
                 if not prep(room):await send(ws,dict(type='error',message='최소 두 명(인간 또는 AI)이 필요합니다.'));continue
                 await broadcast(room);schedule_ai(room)
+            elif cmd=='discard_pair':
+                idx=d.get('indices');hand=room['hands'][seat]
+                good=(room['phase']=='pairing' and not room['ready'][seat] and isinstance(idx,list) and len(idx)==2 and all(type(i)==int and 0<=i<len(hand) for i in idx) and idx[0]!=idx[1])
+                if good:good=(min(hand[idx[0]],hand[idx[1]])>=2 and (hand[idx[0]]-2)%13==(hand[idx[1]]-2)%13)
+                if not good:
+                    await send(ws,dict(type='error',message='같은 숫자 두 장을 선택하세요.'));continue
+                removed=[hand[i] for i in idx]
+                for i in sorted(idx,reverse=True):hand.pop(i)
+                room['discard_pile'].extend(removed);room['event']+=1
+                room['last']={'action':'pair','drawer':seat,'discard':removed,'text':room['players'][seat]['name']+'님이 한 쌍을 버렸어요.'}
+                await broadcast(room)
+            elif cmd=='pair_ready':
+                if room['phase']!='pairing' or room['ready'][seat]:continue
+                if any(sum(1 for c in room['hands'][seat] if c>=2 and (c-2)%13==rank)>1 for rank in range(13)):
+                    await send(ws,dict(type='error',message='남은 짝을 모두 버려야 해요.'));continue
+                room['ready'][seat]=True
+                if all(room['ready'][i] for i,p in enumerate(room['players']) if p):
+                    room['phase']='playing';room['finish']=[i for i,p in enumerate(room['players']) if p and not room['hands'][i]]
+                    remain=live(room);room['turn']=random.choice(remain) if len(remain)>1 else None
+                    room['target']=next_live(room,room['turn']) if room['turn'] is not None else None
+                    room['event']+=1;room['last']={'action':'ready','text':'모든 플레이어가 준비됐어요!'}
+                    if len(remain)<=1:finalize(room)
+                await broadcast(room);schedule_ai(room)
+            elif cmd=='spectator_chat':
+                if room['phase']!='playing' or seat not in room['finish']:continue
+                message=str(d.get('text','')).strip()[:160]
+                if not message:continue
+                room.setdefault('chat',[]).append({'name':room['players'][seat]['name'],'text':message})
+                room['chat']=room['chat'][-50:];await broadcast(room)
             elif cmd=='draw':
                 if room['target'] is not None and room['players'][room['target']] and not room['players'][room['target']]['ai'] and (not room['players'][room['target']]['ws'] or room['players'][room['target']]['ws'].closed):
                     await send(ws,dict(type='error',message='상대방 재접속을 기다려주세요.'));continue
