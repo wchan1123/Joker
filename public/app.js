@@ -1,6 +1,6 @@
 const $=id=>document.getElementById(id), card=c=>`cards/${String(c).padStart(2,'0')}.png`;
 let ws=null,state=null,session=null,muted=false,ctx=null,seen=-1,animating=false,activeCode='';
-const screens=['home','lobby','game','end'];
+let selectedPair=[],spectateSeat=null;const screens=['home','lobby','game','end'];
 function show(which){screens.forEach(id=>$(id).classList.toggle('hidden',id!==which))}
 function toast(t){$('toast').textContent=t;$('toast').classList.remove('hidden');setTimeout(()=>$('toast').classList.add('hidden'),2800)}
 function audio(f=420,d=.11,type='sine',volume=.055){if(muted)return;try{ctx??=new(window.AudioContext||window.webkitAudioContext)();ctx.resume();const osc=ctx.createOscillator(),gain=ctx.createGain();osc.type=type;osc.frequency.setValueAtTime(f,ctx.currentTime);gain.gain.setValueAtTime(volume,ctx.currentTime);gain.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+d);osc.connect(gain);gain.connect(ctx.destination);osc.start();osc.stop(ctx.currentTime+d)}catch{}}
@@ -20,9 +20,9 @@ $('start').onclick=$('rematch').onclick=()=>send({type:'start'});
 function leave(){send({type:'leave'});session=null;state=null;sessionStorage.removeItem('jokerSession');history.replaceState({},'',location.pathname);show('home')}
 $('exitlobby').onclick=$('exitgame').onclick=$('exitend').onclick=leave;
 $('sound').onclick=()=>{muted=!muted;$('sound').textContent=muted?'🔇 소리 꺼짐':'🔊 소리 켜짐';if(!muted)audio(550)};
-function receive(s){const prev=state;state=s;activeCode=s.code;
+function receive(s){const prev=state;if(prev?.event!==s.event&&s.last.action==='pair')selectedPair=[];state=s;activeCode=s.code;
 if(s.phase==='lobby'){show('lobby');lobby()}
-else if(s.phase==='playing'){show('game');renderGame();if(prev?.event!==s.event){if(s.last.action==='shuffle'){animateShuffle();shuffleSound()}else if(s.last.action==='draw'){animateDraw(prev,s);if((s.discardPile?.length||0)>(prev?.discardPile?.length||0))animateDiscard(prev,s)}}}
+else if(s.phase==='playing'||s.phase==='pairing'){show('game');renderGame();if(prev?.event!==s.event){if(s.last.action==='shuffle'){animateShuffle();shuffleSound()}else if(s.last.action==='pair'){animateDiscard(prev,s)}else if(s.last.action==='draw'){animateDraw(prev,s);if((s.discardPile?.length||0)>(prev?.discardPile?.length||0))animateDiscard(prev,s)}}}
 else if(s.phase==='finished'){if(prev?.event!==s.event&&s.last.action==='finish'){show('game');renderGame();revealFinal(s);setTimeout(()=>renderEnd(s),2800)}else renderEnd(s)}
 }
 function lobby(){ $('roomcode').textContent=state.code;const occupied=state.players.filter(Boolean).length;
@@ -36,13 +36,13 @@ const coords={1:[],2:[[50,16]],3:[[22,27],[78,27]],4:[[19,37],[50,13],[81,37]],5
 function opponents(){let seats=[];for(let j=1;j<=5;j++){let i=(state.seat+j)%6;if(state.players[i])seats.push(i)}return seats}
 function renderGame(){let s=state;const ps=s.players;const mine=ps[s.seat];$('round').textContent=s.round;$('gameroom').textContent=`ROOM ${s.code}`;
 $('score').textContent=`승 ${mine.stats.wins} · 패 ${mine.stats.losses} · 연승 ${mine.stats.streak} · 최고 ${mine.stats.best}`;
-$('info').textContent=s.spectating?'👁 관전 중 · 손패 공개':s.turn===s.seat?'✨ 내 차례':s.turn===null?'게임 종료':`${ps[s.turn]?.name||'플레이어'} 차례`;
-$('message').textContent=s.turn===s.seat?`${ps[s.target]?.name}의 카드를 선택하세요`:s.last.text;
+$('info').textContent=s.spectating?'👁 관전 중 · 손패 공개':s.phase==='pairing'?'🃏 시작 패 짝 정리 중':s.turn===s.seat?'✨ 내 차례':s.turn===null?'게임 종료':`${ps[s.turn]?.name||'플레이어'} 차례`;
+$('message').textContent=s.phase==='pairing'?'같은 숫자 두 장을 선택해 중앙에 버리세요':s.turn===s.seat?`${ps[s.target]?.name}의 카드를 선택하세요`:s.last.text;
 $('event').textContent=s.last.action==='draw'?'카드를 뽑았습니다':'';
-renderDiscard(s);const other=opponents();$('players').innerHTML=other.map((seat,order)=>{let p=ps[seat],pos=place(order,other.length+1),clickable=s.turn===s.seat&&s.target===seat&&!animating;
+renderDiscard(s);const other=opponents();$('players').innerHTML=other.map((seat,order)=>{let p=ps[seat],pos=place(order,other.length+1),clickable=s.phase==='playing'&&s.turn===s.seat&&s.target===seat&&!animating;
 return `<div class="player ${clickable?'pickable':''}" style="left:${pos[0]}%;top:${pos[1]}%"><div class="label ${s.turn===seat?'active':''} ${p.count===0?'out':''}">${p.ai?'🤖':'👤'} ${esc(p.name)} · ${p.count}장 ${p.count===0?'✓':''}</div><div class="fan">${Array.from({length:p.count},(_,ix)=>`<img class="card" data-seat="${seat}" data-index="${ix}" src="${card(s.spectating&&s.visibleHands?.[seat]?s.visibleHands[seat][ix]:41)}" alt="상대 카드">`).join('')}</div></div>`}).join('');
 $('players').querySelectorAll('.pickable img').forEach(el=>el.onclick=()=>{if(animating)return;animating=true;send({type:'draw',index:Number(el.dataset.index)});setTimeout(()=>animating=false,820)});
-$('mycards').innerHTML=s.hand.map((c,i)=>`<img class="card" src="${card(c)}" alt="내 카드" style="--rot:${((i-(s.hand.length-1)/2)*Math.min(5,50/Math.max(s.hand.length,1))).toFixed(2)}deg;--y:${Math.abs(i-(s.hand.length-1)/2)*1.0}px">`).join('');
+$('mycards').innerHTML=s.hand.map((c,i)=>`<img data-handindex="${i}" class="card ${selectedPair.includes(i)?'selectedpair':''}" src="${card(c)}" alt="내 카드" style="--rot:${((i-(s.hand.length-1)/2)*Math.min(5,50/Math.max(s.hand.length,1))).toFixed(2)}deg;--y:${Math.abs(i-(s.hand.length-1)/2)*1.0}px">`).join('');
 }
 function animateShuffle(){
  const felt=document.querySelector('.felt');if(!felt)return;
@@ -110,3 +110,30 @@ function animateDiscard(prev,s){
  cards.forEach((id,i)=>{let el=document.createElement('img');el.src=card(id);el.className='discard-flight';el.style.left=(a.left+a.width/2-27)+'px';el.style.top=(a.top+a.height/2-38)+'px';document.body.append(el);let dx=b.left+b.width/2-(a.left+a.width/2),dy=b.top+b.height/2-(a.top+a.height/2);
  el.animate([{transform:'translate(0,0) rotate(-14deg)'},{transform:'translate('+dx*.5+'px,'+(dy*.5-80)+'px) rotate(18deg)',offset:.55},{transform:'translate('+dx+'px,'+dy+'px) rotate(0deg) scale(.83)'}],{duration:850,delay:i*170,fill:'forwards',easing:'ease-in-out'});setTimeout(()=>el.remove(),1000+i*170)});
 }
+
+function renderPairUI(s){
+ const active=s.phase==='pairing'&&!s.ready?.[s.seat];$('pairtools').classList.toggle('hidden',s.phase!=='pairing');
+ $('pairdiscard').disabled=!active||selectedPair.length!==2;
+ $('pairready').disabled=!active;
+ $('pairhint').textContent=s.ready?.[s.seat]?'준비 완료 · 다른 플레이어를 기다리는 중':selectedPair.length+' / 2장 선택';
+ $('mycards').querySelectorAll('[data-handindex]').forEach(el=>el.onclick=()=>{
+  if(!active)return;const i=Number(el.dataset.handindex);selectedPair=selectedPair.includes(i)?selectedPair.filter(x=>x!==i):selectedPair.length<2?[...selectedPair,i]:[i];
+  renderGame();
+ });
+}
+$('pairdiscard').onclick=()=>{if(selectedPair.length!==2)return;send({type:'discard_pair',indices:selectedPair});selectedPair=[]};
+$('pairready').onclick=()=>{selectedPair=[];send({type:'pair_ready'})};
+function renderSpectatorUI(s){
+ const active=s.phase==='playing'&&s.spectating;const panel=$('spectools');panel.classList.toggle('hidden',!active);if(!active)return;
+ const seats=s.players.map((p,i)=>p&&p.count?i:null).filter(i=>i!==null);
+ if(!seats.includes(spectateSeat))spectateSeat=seats[0]??null;
+ $('spectarget').innerHTML=seats.map(i=>'<option value="'+i+'" '+(i===spectateSeat?'selected':'')+'>'+esc(s.players[i].name)+'</option>').join('');
+ const cards=s.visibleHands?.[spectateSeat]||[];
+ $('specthand').innerHTML=cards.map(id=>'<img src="'+card(id)+'" class="card">').join('');
+ $('chatlog').innerHTML=(s.chat||[]).map(m=>'<div><strong>'+esc(m.name)+'</strong>: '+esc(m.text)+'</div>').join('');
+}
+$('spectarget').onchange=e=>{spectateSeat=Number(e.target.value);renderSpectatorUI(state)};
+$('chatsend').onclick=()=>{let el=$('chatinput');if(!el.value.trim())return;send({type:'spectator_chat',text:el.value});el.value=''};
+$('chatinput').onkeydown=e=>{if(e.key==='Enter')$('chatsend').click()};
+$('discard-stack').onclick=()=>{if(!state)return;$('pilemodal').classList.remove('hidden');$('pilelist').innerHTML=(state.discardPile||[]).map(id=>'<img src="'+card(id)+'" class="card">').join('')};
+$('pileclose').onclick=()=>$('pilemodal').classList.add('hidden');
