@@ -40,7 +40,7 @@ $('info').textContent=s.spectating?'👁 관전 중 · 손패 공개':s.phase===
 $('message').textContent=s.phase==='pairing'?'같은 숫자 두 장을 선택해 중앙에 버리세요':s.turn===s.seat?`${ps[s.target]?.name}의 카드를 선택하세요`:s.last.text;
 $('event').textContent=s.last.action==='draw'?'카드를 뽑았습니다':'';
 renderDiscard(s);const other=opponents();$('players').innerHTML=other.map((seat,order)=>{let p=ps[seat],pos=place(order,other.length+1),clickable=s.phase==='playing'&&s.turn===s.seat&&s.target===seat&&!animating;
-return `<div class="player ${clickable?'pickable':''}" style="left:${pos[0]}%;top:${pos[1]}%"><div class="label ${s.turn===seat?'active':''} ${p.count===0?'out':''}">${p.ai?'🤖':'👤'} ${esc(p.name)} · ${p.count}장 ${p.count===0?'✓':''}</div><div class="fan">${Array.from({length:p.count},(_,ix)=>`<img class="card" data-seat="${seat}" data-index="${ix}" src="${card(s.spectating&&s.visibleHands?.[seat]?s.visibleHands[seat][ix]:41)}" alt="상대 카드">`).join('')}</div></div>`}).join('');
+return `<div class="player ${clickable?'pickable':''}" style="left:${pos[0]}%;top:${pos[1]}%"><div class="label ${s.turn===seat?'active':''} ${p.count===0?'out':''}">${p.ai?'🤖':'👤'} ${esc(p.name)} · ${p.count}장 ${p.count===0?('🏅 '+(s.finish.indexOf(seat)+1)+'위'):''}</div><div class="fan">${Array.from({length:p.count},(_,ix)=>`<img class="card" data-seat="${seat}" data-index="${ix}" src="${card(s.spectating&&s.visibleHands?.[seat]?s.visibleHands[seat][ix]:41)}" alt="상대 카드">`).join('')}</div></div>`}).join('');
 $('players').querySelectorAll('.pickable img').forEach(el=>el.onclick=()=>{if(animating)return;animating=true;send({type:'draw',index:Number(el.dataset.index)});setTimeout(()=>animating=false,820)});
 $('mycards').innerHTML=s.hand.map((c,i)=>`<img data-handindex="${i}" class="card ${selectedPair.includes(i)?'selectedpair':''}" src="${card(c)}" alt="내 카드" style="--rot:${((i-(s.hand.length-1)/2)*Math.min(5,50/Math.max(s.hand.length,1))).toFixed(2)}deg;--y:${Math.abs(i-(s.hand.length-1)/2)*1.0}px">`).join('');
  renderPairUI(s);renderSpectatorUI(s);
@@ -109,7 +109,7 @@ function animateDiscard(prev,s){
  const zone=$('discard-stack'),felt=document.querySelector('.felt');if(!zone||!felt||!cards.length)return;
  let a=(s.last.drawer===s.seat?$('mycards'):document.querySelector('.player .fan'))?.getBoundingClientRect()||felt.getBoundingClientRect(),b=zone.getBoundingClientRect();
  cards.forEach((id,i)=>{let el=document.createElement('img');el.src=card(id);el.className='discard-flight';el.style.left=(a.left+a.width/2-27)+'px';el.style.top=(a.top+a.height/2-38)+'px';document.body.append(el);let dx=b.left+b.width/2-(a.left+a.width/2),dy=b.top+b.height/2-(a.top+a.height/2);
- el.animate([{transform:'translate(0,0) rotate(-14deg)'},{transform:'translate('+dx*.5+'px,'+(dy*.5-80)+'px) rotate(18deg)',offset:.55},{transform:'translate('+dx+'px,'+dy+'px) rotate(0deg) scale(.83)'}],{duration:850,delay:i*170,fill:'forwards',easing:'ease-in-out'});setTimeout(()=>el.remove(),1000+i*170)});
+ el.animate([{transform:'translate(0,0) rotate(-14deg)'},{transform:'translate('+dx*.5+'px,'+(dy*.5-80)+'px) rotate(18deg) rotateY(90deg)',offset:.55},{transform:'translate('+dx+'px,'+dy+'px) rotate(0deg) rotateY(180deg) scale(.83)'}],{duration:850,delay:i*170,fill:'forwards',easing:'ease-in-out'});setTimeout(()=>{el.src=card(41)},430+i*170);setTimeout(()=>el.remove(),1000+i*170)});
 }
 
 function renderPairUI(s){
