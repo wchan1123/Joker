@@ -56,10 +56,14 @@ def next_turn(r):
     if current not in alive:r['turn']=alive[0]
     else:
         pos=alive.index(current);r['turn']=alive[(pos+1)%len(alive)]
-        if pos==len(alive)-1:enemy_attack(r)
+        if pos==len(alive)-1:
+            enemy_attack(r)
+            if not [i for i,p in enumerate(r['players']) if p['hp']>0]:
+                r['phase']='lost';r['turn']=None;log(r,'파티 전멸! 다시 도전하세요.')
 def enemy_attack(r):
     target=random.choice([p for p in r['players'] if p['hp']>0])
     c=mods(target);damage=max(0,r['enemy']['attack']-c('guard')-2*c('ward')-4*c('immortal')-2*c('shield')-2*c('armor')*(r['stage']%5==0)+c('star'))
+    damage=max(0,damage-r['enemy'].get('frost',0));r['enemy']['frost']=0
     target['hp']-=damage
     r['enemy']['hp']=max(0,r['enemy']['hp']-2*c('thorns'))
     log(r,f"적 공격! {target['name']} 체력 -{damage}")
@@ -88,6 +92,7 @@ def attack(r,seat,index):
     if r['phase']!='battle' or r['turn']!=seat:return '차례가 아니에요.'
     if type(index)!=int or not 0<=index<len(r['enemy_cards']):return '카드를 다시 선택해 주세요.'
     p=r['players'][seat];c=mods(p)
+    p['hp']=min(p['maxhp'],p['hp']+2*c('regen'))
     if p['hp']<=0:return '탈락한 플레이어예요.'
     card=r['enemy_cards'].pop(index);hand=r['hands'][seat]
     found=next((i for i,x in enumerate(hand) if rank(x)==rank(card) and rank(card)!=-1),None)
@@ -104,7 +109,7 @@ def attack(r,seat,index):
         if random.random()<.2*c('lucky')+.15*c('dice')+.25*c('critical'):damage+=6 if c('critical') else damage
         if random.random()<.35*c('destiny')+.3*c('gamble'):damage*=2
         if random.random()<.2*c('echo'):damage*=2
-        p['hp']=min(p['maxhp'],p['hp']+2*c('vamp')+2*c('regen'))
+        p['hp']=min(p['maxhp'],p['hp']+2*c('vamp'))
         for ally in r['players']:ally['hp']=min(ally['maxhp'],ally['hp']+3*c('holy'))
         r['enemy']['poison']+=3*c('poison');r['enemy']['frost']+=2*c('frost')
         log(r,f"{p['name']} 짝 성공! {damage} 피해")
