@@ -1,6 +1,7 @@
 import asyncio, json, random, secrets, os
 from aiohttp import web, WSMsgType
 import rogue
+import poker
 ROOT=os.path.dirname(__file__)
 rooms={}
 MAX=6
@@ -212,5 +213,6 @@ async def websocket(req):
 async def health(req):return web.json_response({'ok':True,'rooms':len(rooms)})
 async def index(req):return web.FileResponse(os.path.join(ROOT,'public','index.html'))
 async def rogue_index(req):return web.FileResponse(os.path.join(ROOT,'public','roguelike.html'))
-app=web.Application();rogue.setup(app);app.router.add_get('/roguelike',rogue_index);app.router.add_get('/',index);app.router.add_get('/health',health);app.router.add_get('/ws',websocket);app.router.add_static('/',os.path.join(ROOT,'public'),show_index=False)
+async def poker_index(req):return web.FileResponse(os.path.join(ROOT,'public','poker.html'))
+app=web.Application();rogue.setup(app);poker.setup(app);app.router.add_get('/poker',poker_index);app.router.add_get('/roguelike',rogue_index);app.router.add_get('/',index);app.router.add_get('/health',health);app.router.add_get('/ws',websocket);app.router.add_static('/',os.path.join(ROOT,'public'),show_index=False)
 if __name__=='__main__':web.run_app(app,host='0.0.0.0',port=int(os.environ.get('PORT','8080')))
